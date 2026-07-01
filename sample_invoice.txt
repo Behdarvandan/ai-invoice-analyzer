@@ -1,0 +1,9 @@
+RECHNUNG / INVOICE
+Müller GmbH - Berlin, Germany
+Datum: 12.05.2026
+Rechnungsnummer: INV-2026-001
+---------------------------------------------
+Beschreibung: Cloud Consulting Services
+Netto: 1000.00 EUR
+MwSt (19%): 190.00 EUR
+Gesamtbetrag: 1190.00 EUR
