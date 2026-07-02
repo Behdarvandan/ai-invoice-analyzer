@@ -1,12 +1,13 @@
-import argparse
 import json
 import os
-import sys
 
+import boto3
 from groq import Groq
 from pydantic import BaseModel, Field, ValidationError
 
 MODEL = "llama-3.3-70b-versatile"
+
+s3_client = boto3.client("s3")
 
 
 class InvoiceData(BaseModel):
@@ -17,9 +18,9 @@ class InvoiceData(BaseModel):
     currency: str = Field(description="Currency (e.g. TRY, USD, EUR) as an ISO 4217 code")
 
 
-def read_invoice_text(invoice_path: str) -> str:
-    with open(invoice_path, "r", encoding="utf-8") as f:
-        return f.read()
+def read_invoice_text_from_s3(bucket_name: str, object_key: str) -> str:
+    response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+    return response["Body"].read().decode("utf-8")
 
 
 def extract_invoice_data(invoice_text: str) -> InvoiceData:
@@ -58,26 +59,21 @@ def extract_invoice_data(invoice_text: str) -> InvoiceData:
         raise RuntimeError(f"Model output does not match the expected schema: {exc}") from exc
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Extracts structured data from invoice text (Groq llama-3.3-70b-versatile)."
-    )
-    parser.add_argument("invoice_path", help="Path to the invoice text file (.txt)")
-    args = parser.parse_args()
-
-    if not os.path.isfile(args.invoice_path):
-        print(f"Error: '{args.invoice_path}' not found.", file=sys.stderr)
-        sys.exit(1)
+def lambda_handler(event, context):
+    record = event["Records"][0]
+    bucket_name = record["s3"]["bucket"]["name"]
+    object_key = record["s3"]["object"]["key"]
 
     try:
-        invoice_text = read_invoice_text(args.invoice_path)
+        invoice_text = read_invoice_text_from_s3(bucket_name, object_key)
         result = extract_invoice_data(invoice_text)
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(exc)}, ensure_ascii=False),
+        }
 
-    print(json.dumps(result.model_dump(), ensure_ascii=False, indent=2))
-
-
-if __name__ == "__main__":
-    main()
+    return {
+        "statusCode": 200,
+        "body": json.dumps(result.model_dump(), ensure_ascii=False),
+    }
